@@ -7,5 +7,5 @@ The data from different sources were consolidated into a single table. Climatic 
 For the analysis, a threshold was defined to classify cases as **epidemic** or **non-epidemic**. Different methods for selecting climatic variables were then applied, followed by the fitting of logistic regression models to evaluate white mold epidemics in soybean.
 
 Although the models showed satisfactory performance metrics, the main issue lies in the biological interpretation of the selected variables. Based on field observations from researchers, extension agents, and producers, it is well established that **cool temperatures combined with prolonged periods of rainfall** favor white mold epidemics. However, the models suggested the opposite, indicating that **high temperatures and dry conditions** were associated with epidemics, which is not consistent with biological knowledge or agronomic understanding of the disease.
-
+**This HTML is an exemplification of the analyses performed**.
 ![](images/wms.jpg){fig-align="center"}
