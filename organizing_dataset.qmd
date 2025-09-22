@@ -1,0 +1,76 @@
+---
+title: ""
+format: html
+editor: visual
+---
+
+## Loading some packages
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(writexl)
+library(tidyverse)
+library(gsheet)
+library(lubridate)
+```
+
+## Field dataset
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_all2 <- gsheet2tbl("https://docs.google.com/spreadsheets/d/14Ijvs2e8wUmG23Izkg-MUrG4A2vjogX-/edit?usp=sharing&ouid=116573839171815179218&rtpof=true&sd=true")
+
+```
+
+## Interval before and after sowing date
+
+Before creating the intervals, you need to verify whether the dates are in the correct format and ensure that the data is consistent across all studies
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_all2=dat_all2 %>% filter(study!="106")
+
+dat_all2 <- dat_all2 %>%
+  mutate(sowing = if_else(study == 150, as.Date("2024-11-01"), sowing))
+trials_setup <- dat_all2 %>%
+  # filter(study != c(29, 30)) %>%
+  mutate(
+    sowing = as.Date(sowing, format = "%d-%m-%Y")
+  ) %>%
+  mutate(
+    minus5 = sowing - 5,
+    plus90 = sowing + 90
+  )
+
+
+```
+
+## Classification in epidemic and non-epidemic
+
+The threshold you choose to classify epidemics and non-epidemics may vary. For example, you might use the median value, as it splits the dataset into epidemic and non-epidemic groups more evenly. Alternatively, you could select a threshold that makes sense in the field, taking into account crop damage and yield loss.
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+trials_setup2 = trials_setup |> filter(!is.na(inc)) %>%
+  mutate(epidemic = case_when(
+    inc <= 28 ~ 0,
+   inc > 28  ~ 1))
+
+trials_setup2 |> group_by(study) |> 
+  count()
+
+write_xlsx(trials_setup2, "trials_setup2.xlsx")
+
+```

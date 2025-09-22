@@ -1,0 +1,15 @@
+{
+  "hash": "6a3dc268ffe2ab74398a3ee9443ccdf5",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"weather_dataset\"\nformat: html\neditor: visual\n---\n\n\n\n\nYou can select different sources to obtain your weather dataset, such as NASA POWER or Xavier. These need to be combined with the field data before applying different methods of analysis.\n\n## Field data\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code}\nlibrary(gsheet) \ntrials_setup2 = gsheet2tbl('https://docs.google.com/spreadsheets/d/1TibIDThKMxkCoYW3skUWShwBz51ClhSP/edit?usp=sharing&ouid=116573839171815179218&rtpof=true&sd=true')\n```\n:::\n\n\n\n\n## Get nasapower\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code}\nlibrary(readr)\nlibrary(nasapower)\nbox = data.frame()\n\nfor(i in 1:length(trials_setup2$study)){\n\nlil_nasa <- get_power(\n community = \"ag\",\n  temporal_api = \"daily\",\n  dates = c(trials_setup2$minus5[i] , trials_setup2$plus90[i]),\n  lonlat = c(trials_setup2$lon[i], trials_setup2$lat[i]),\n   pars = c(\"GWETROOT\", \"GWETTOP\", \"T2M\", \"T2M_MAX\", \"T2M_MIN\", \n             \"T2M_RANGE\", \"RH2M\", \"PRECTOTCORR\", \"T2MDEW\",\"WS2M\", \n             \"PS\", \"ALLSKY_SFC_SW_DWN\", \"CLRSKY_SFC_SW_DWN\")\n ) %>%\n   mutate(study = trials_setup2$study[i])\n  box = box %>%\nbind_rows(lil_nasa) \n}\n\n\nwrite.csv(box, \"weather_data.csv\")\n```\n:::\n\n\n\n\n## Get Xavier\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code}\n#library(tidyverse)\n#library(readxl)\n#xavier <- read_excel(\"data_xavier.xlsx\")\n\n#dat_all2 <- read_csv(\"data_all.csv\")\n\n#trials_weather0 <- left_join(dat_all2, xavier |>  mutate(study = as.numeric(study)))\n\n#trials_weather <- trials_weather0 |> \n #   mutate(\n  #  e_s = 0.6108 * exp((17.27 * ((tmax+tmin)/2)) / (((tmax+tmin)/2) + 237.3)),\n  #  e_a = e_s * (rh / 100),\n   # VPD = e_s - e_a) |> \n  #mutate(T2M_night = (((tmax+tmin)/2) + tmin)/2) |> \n  # mutate(epidemic = case_when(inc > 20 ~ 1, TRUE ~ 0)) |> \n  #rename(YYYYMMDD = date) |> \n  #mutate(tmean = (tmax + tmin)/2)\n```\n:::\n\n\n\n\n## Creating new variables\n\nFirst you need join the field dataset with the weather data set\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code}\nweather_data <- box\n\ntrials_weather0 <- left_join(trials_setup2, weather_data)\n```\n:::\n\n\n\n\n### Create new weather variables\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code}\ntrials_weather <- trials_weather0 |> \n   mutate(\n    days = as.integer(YYYYMMDD - sowing)) |> \n   filter(days > -31) |> \n   mutate(\n    e_s = 0.6108 * exp((17.27 * T2M) / (T2M + 237.3)),\n    e_a = e_s * (RH2M / 100),\n    VPD = e_s - e_a) |> \nmutate(TDD = T2M - T2MDEW) |> \n  mutate(T2M_night = (T2M + T2M_MIN)/2) |> \n  mutate(\n    LWD_hours = case_when(\n      RH2M >= 90 ~ 8,\n      (T2M - T2MDEW) <= 2 ~ 4,\n      TRUE ~ 0\n    )) |> \n  mutate(int1 = T2M_night*RH2M) |> \n  mutate(\n    CLOUDCOVER = (1 - (ALLSKY_SFC_SW_DWN / CLRSKY_SFC_SW_DWN)) * 100\n  )\nwrite_csv(trials_weather, \"nasa_predictors.csv\")\n```\n:::\n",
+    "supporting": [],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

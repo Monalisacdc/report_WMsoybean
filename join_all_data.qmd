@@ -1,0 +1,198 @@
+---
+title: ""
+format: html
+editor: visual
+---
+
+This code is joining different data frames that contain distinct data on white mold in soybean, totaling 194 independent epidemics/studies
+
+## Loading some packages
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(tidyverse)
+library(gsheet)
+library(lubridate)
+```
+
+## Observational met ABC
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_obs <- gsheet2tbl("https://docs.google.com/spreadsheets/d/147CfNq4VxsngBBj1IuiLDUDD-dqlsGMJ/edit?gid=508520618#gid=508520618")
+
+dat_obs2 <- dat_obs |> 
+  filter(FUNGICIDA == "Sem Fungicida") |> 
+  filter(IRRIG == "Não") |> 
+  filter(SEMEADURA > 0) |> 
+  dplyr::select(SEMEADURA, MUNIC, FAZ, LAT_DEC, LONG_DEC, TALHAO, INCID, SEV) |> 
+  group_by(MUNIC) |> 
+    reframe(municipality = MUNIC,
+              sowing = mean(SEMEADURA),
+            lat = - mean(LAT_DEC),
+            lon = - mean(LONG_DEC),
+            inc = mean(INCID)) |> 
+  dplyr::select(-MUNIC) |> 
+  mutate(source = "ABC_met_obs")
+
+dat_obs2 = dat_obs2 |> group_by(municipality, sowing, lon, lat, inc, source ) |> summarise(inc = mean(inc)) |> 
+    mutate(sowing = ymd(sowing)) 
+
+
+
+```
+
+## Experiments met ABC
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_exp1 <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1FmdU9Z_g2dagHpSRciHl50qajtuHhuVj/edit?gid=1611656078#gid=1611656078")
+
+dat_exp12 <- dat_exp1 |> 
+  filter(Químico == "Testemunha") |> 
+  filter(Biológico == "Testemunha") |> 
+  group_by(AMB, Safra, Local, Plantio) |> 
+  summarise(inc = mean(inc)) |> 
+  filter(inc > 0)
+  
+Local = c("Arapoti-PR", "Taquarivaí-SP", "Castro-PR")
+lat = c(-24.15, -23.93, -24.75)
+lon = c(-49.80, -48.59, -49.88)
+locais = data.frame(Local, lat, lon)
+
+dat_exp13 <- left_join(dat_exp12, locais) |>
+  ungroup() |> 
+  dplyr::select(Local, Plantio, lat, lon, inc) |> 
+  rename(municipality = Local,
+         sowing = Plantio) |> 
+  mutate(source = "ABC_met_exp") |> 
+   mutate(sowing = ymd(sowing)) 
+
+
+
+```
+
+## Experiments Fitopatologia ABC
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+abc_fito <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1kA267xmYZemUAejz2DMy7_BKLd9OMpOt/edit?gid=1148766694#gid=1148766694")
+
+abc_fito2 <- abc_fito |> 
+  filter(Fungicida == "Testemunha") |> 
+  group_by(Local, Safra, Semeadura) |> 
+  summarise(inc = mean(INC_SCLESC))
+
+Local = c("Castro", "Ponta Grossa")
+lat = c(-24.75, -25.192)
+lon = c(-49.88, -49.978)
+locais = data.frame(Local, lat, lon)
+
+
+abc_fito3 <- left_join(abc_fito2, locais) |>
+  ungroup() |> 
+  dplyr::select(Local, Semeadura, lat, lon, inc) |> 
+  rename(municipality = Local,
+         sowing = Semeadura) |> 
+  mutate(source = "ABC_fito_exp") |> 
+   mutate(sowing = ymd(sowing)) 
+
+```
+
+## Experiments Embrapa + epoca_semadura
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_emb <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1wd-UFs0P4mYOOLo7UobgUsqh2cTp1EiIkcw9p_MQlvI/edit?usp=sharing")
+
+dat_emb1 <- dat_emb |> 
+  filter(exper == "rede") |> 
+  group_by(study, local, sowing, lat, lon,) |> 
+  summarise(inc = mean(inc)) |> 
+  filter(sowing > 0) |> 
+  dplyr::select(local, sowing, lat, lon, inc) |> 
+  filter(inc > 0) |> 
+  rename(municipality = local, sowing = sowing) |> 
+  mutate(source = "EMBRAPA") |> 
+  ungroup() |>
+  dplyr::select(-study) |> 
+   mutate(sowing = dmy(sowing)) 
+```
+
+## Epoca semeadura
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_emb <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1wd-UFs0P4mYOOLo7UobgUsqh2cTp1EiIkcw9p_MQlvI/edit?usp=sharing")
+
+dat_sem <- dat_emb |> 
+  filter(exper == "epoca_semeadura") |> 
+  group_by(study, local, sowing, lat, lon) |> 
+  summarise(inc = mean(inc)) |> 
+  filter(sowing > 0) |> 
+  dplyr::select(local, sowing, lat, lon, inc) |> 
+  filter(inc > 0) |> 
+  rename(municipality = local, sowing = sowing) |> 
+  mutate(source = "epoca_semeadura") |> 
+  ungroup() |>
+  dplyr::select(-study) |> 
+   mutate(sowing = dmy(sowing)) 
+```
+
+## Experiments biocontrol
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_biol <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1XtL_yrp40YurKa5Dn2yGDead-vsefsI1wBXG8pPI1rU/edit?gid=1063587995#gid=1063587995")
+
+dat_biol1 <- dat_biol |> 
+  dplyr::select(location, planting_date, lat, lon, inc) |> 
+  rename(municipality = location, sowing = planting_date) |> 
+    mutate(source = "biocontrol") |> 
+   mutate(sowing = ymd(sowing)) 
+
+```
+
+## Join all data
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+dat_all <- rbind(dat_obs2, dat_exp13, dat_emb1, dat_sem, dat_biol1, abc_fito3)
+
+dat_all2 <- dat_all |> 
+   ungroup() |>  # <- necessário para evitar o erro
+  mutate(study = row_number())
+
+summary(dat_all$inc)
+
+library(writexl)
+
+# Escreve o arquivo Excel
+write_xlsx(dat_all2, "data_all.xlsx")
+
+
+```

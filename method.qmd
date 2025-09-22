@@ -1,0 +1,207 @@
+---
+title: ""
+format: html
+editor: visual
+---
+
+Method 2 Window Pane-LASSO-Best Subset
+
+## Loading dataset
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(gsheet)
+trials_weather = gsheet2tbl("https://docs.google.com/spreadsheets/d/1SIb-z-c2R4DiNAV8AcFAn7UPjlQe5t5bPxxl1tMdQwA/edit?usp=sharing")
+```
+
+The Window Pane method is used to summarize weather variables over specific time windows relative to an event (for example, sowing or flowering). Instead of analyzing daily values, the variable is aggregated (using mean, sum, or another statistic) over fixed intervals, such as 1–10 days after sowing, 11–20 days, and so on. This reduces noise and allows identification of critical time windows that may influence disease development.
+
+## Creating window
+
+```{r, eval = FALSE}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(rlang)
+# Define the intervals
+window_size <- 10
+start_days <- -5:(90 - window_size + 1)
+
+intervals <- lapply(start_days, function(s) c(s, s + window_size - 1))
+
+#List of variables to summarize
+vars <- c("GWETROOT", "GWETTOP", "T2M", "T2M_MAX", "T2M_MIN", "T2M_RANGE", "RH2M", "PRECTOTCORR","T2MDEW", "WS2M",'PS',"ALLSKY_SFC_SW_DWN", "CLRSKY_SFC_SW_DWN", "e_s","e_a","VPD", "TDD","T2M_night","LWD_hours","CLOUDCOVER")
+
+# Function to compute a summary variable for a period
+summarize_period <- function(data, var, period, label) {
+ var_sym <- sym(var)
+  start_day <- period[1]
+  end_day <- period[2]
+  period_name <- paste0(var, "_", label)
+
+data %>%
+   dplyr::select(study, days, !!var_sym) %>%
+    group_by(study, days) %>%
+    summarise(value = mean(!!var_sym, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = days, values_from = value) %>%
+    mutate(!!period_name := rowMeans(across(as.character(start_day:end_day)), na.rm = TRUE)) %>%
+    dplyr::select(study, !!period_name) %>%
+    mutate(study = factor(study))
+}
+
+# Create all variable summaries for all intervals
+# Function to format day labels
+format_day <- function(day) {
+  if (day < 0) paste0("n", abs(day)) else as.character(day)
+}
+
+# Create all variable summaries for all intervals with clean labels
+summaries <- cross2(vars, intervals) %>%
+  imap(~ {
+    var <- .x[[1]]
+    period <- .x[[2]]
+    label <- paste0(format_day(period[1]), "_", format_day(period[2]))
+    summarize_period(
+      data = trials_weather,
+      var = var,
+      period = period,
+      label = label
+    )
+  })
+
+# Create epidemic base
+epidemic <- trials_weather %>%
+  dplyr::select(study, epidemic) %>%
+  group_by(study) %>%
+  slice(1) %>%
+  mutate(study = factor(study))
+
+# Join all summaries and epidemic
+final_df <- reduce(summaries, left_join, by = "study") %>%
+  left_join(epidemic, by = "study")
+final_df2 <- na.omit(final_df)
+
+library(writexl)
+write_xlsx(final_df2, "final_df2.xlsx")
+
+```
+
+## LASSO
+
+(Least Absolute Shrinkage and Selection Operator)
+
+The LASSO regression is a variable selection and regularization technique. It applies a penalty to the size of the regression coefficients, forcing some of them to become exactly zero. This way, LASSO automatically selects the most important predictors (weather variables and time windows) while avoiding overfitting. It is especially useful when there are many correlated predictors.
+
+```{r, eval = FALSE}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(glmnet)
+weather_vars <- trials_weather %>% 
+  dplyr::select(c(-lon, -lat, -LON, -LAT, -YEAR, -MM, -DOY, -YYYYMMDD, -days, -inc, -source, -sowing, -municipality, -DD))
+set.seed(123)
+lambdas <- 10^seq(2, -3, by = -.1)
+
+y <- final_df2 %>%
+  dplyr::select(epidemic) %>%
+  as.matrix()
+
+
+
+X <- final_df2%>%
+  ungroup() |> 
+  dplyr::select(-epidemic, - study) %>%
+  as.matrix()
+
+
+# Setting alpha = 1 implements lasso regression
+lasso_reg_1week <- cv.glmnet(X, y,
+  alpha = 0.5,
+  family = "binomial",
+  lambda = lambdas,
+  standardize = TRUE,
+  nfolds = 5
+)
+plot(lasso_reg_1week)
+
+# Best
+lambda_best_1week <- 0.06
+
+lambda_best_1week
+
+lasso_model_1week <- glmnet(X,
+  y,
+  alpha = 1,
+  family = "binomial",
+  lambda = lambda_best_1week,
+  standardize = TRUE
+)
+coef(lasso_model_1week)
+coefs = coef(lasso_model_1week)
+
+nonzero_coefs <- data.frame(
+  variable = rownames(coefs),
+  coefficient = as.numeric(coefs)
+) %>%
+  filter(abs(coefficient) > 1e-6) %>%   # ignora valores muito próximos de zero
+  arrange(desc(abs(coefficient)))
+
+
+assess.glmnet(lasso_model_1week,
+  newx = X,
+  newy = y
+)
+
+
+```
+
+## Best Subset Selection
+
+The Best Subset Selection method evaluates all possible combinations of predictors and identifies the subset that provides the best model fit according to a chosen criterion (such as AIC, BIC, or adjusted R²). Unlike LASSO, which imposes shrinkage, Best Subset exhaustively searches for the optimal combination of variables, although it may become computationally intensive when the number of predictors is large.
+
+```{r, eval = FALSE}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(bestglm)
+
+# Extract non-zero coefficient names (exclude intercept)
+lasso_coefs <- coef(lasso_model_1week)
+selected_vars <- rownames(lasso_coefs)[which(lasso_coefs != 0)]
+selected_vars <- selected_vars[!selected_vars %in% c("(Intercept)")]
+selected_vars
+
+
+data_v <- data.frame(final_df)
+dat <- data_v %>%
+dplyr::select(epidemic,selected_vars) %>%
+  mutate(y = epidemic) %>%
+  dplyr::select(-1)
+dat <- data.frame(dat)
+
+best.logit2 <- bestglm(
+  Xy = dat,
+  family = binomial,
+  IC = "BIC",
+  TopModels = 50000,
+  method = "exhaustive",
+  nvmax = 10
+)
+summary(best.logit2$BestModel)
+best.logit2$Subsets
+
+
+f <- data.frame(best.logit2$Subsets)
+
+
+
+```

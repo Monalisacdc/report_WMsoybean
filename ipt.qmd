@@ -1,0 +1,150 @@
+---
+title: ""
+format: html
+editor: visual
+---
+
+# Method 1 IPT test
+
+The ITP test evaluates whether the temporal patterns of a weather variable differ significantly between epidemic and non-epidemic conditions, highlighting the critical time periods in which these differences occur.
+
+# function FDATEST
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(gsheet)
+trials_weather = gsheet2tbl("https://docs.google.com/spreadsheets/d/1SIb-z-c2R4DiNAV8AcFAn7UPjlQe5t5bPxxl1tMdQwA/edit?usp=sharing")
+```
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+library(fdatest)
+library(dplyr)
+library(tidyr)
+
+run_ITP_test <- function(data, weather_var = "RH2M", B = 100) {
+  
+  # Preprocessing
+  data <- data %>%
+    mutate(
+      YYYYMMDD = as.Date(YYYYMMDD),
+      days = days
+     
+    )
+  
+  weather_var_sym <- sym(weather_var)
+  
+  # Filter epidemic data
+  df_epidemic <- data %>%
+    mutate(days = round(days)) %>%
+    filter(epidemic == 1, days > -10) %>%
+    dplyr::select(!!weather_var_sym, days, study) %>%
+    group_by(study, days) %>%
+    summarise(value = mean(!!weather_var_sym, na.rm = TRUE), .groups = "drop")
+  
+  # Filter non-epidemic data
+  df_non_epidemic <- data %>%
+    mutate(days = round(days)) %>%
+    filter(epidemic != 1, days > -10) %>%
+    dplyr::select(!!weather_var_sym, days, study) %>%
+    group_by(study, days) %>%
+    summarise(value = mean(!!weather_var_sym, na.rm = TRUE), .groups = "drop")
+  
+  # Pivot to wide format
+  df_epidemic_wide <- df_epidemic %>%
+    pivot_wider(names_from = days, values_from = value) %>%
+    ungroup() %>%
+    dplyr::select(-study)
+  
+  df_non_epidemic_wide <- df_non_epidemic %>%
+    pivot_wider(names_from = days, values_from = value) %>%
+    ungroup() %>%
+    dplyr::select(-study)
+  
+ 
+  
+  # Convert to matrix
+  data_epidemic <- as.matrix(df_epidemic_wide)
+  data_non_epidemic <- as.matrix(df_non_epidemic_wide)
+  
+  # Perform FDA test
+  itp_result <- ITP2bspline(data1 = data_epidemic, data2 = data_non_epidemic, B = B)
+  
+  # Output results
+  cat("Global p-value for", weather_var, ":", itp_result$corrected.pval, "\n")
+  significant_components <- which(itp_result$corrected.pval < 0.05)
+  
+  if (length(significant_components) > 0) {
+    cat("Significant components (basis coefficients) for", weather_var, ":\n")
+    print(significant_components)
+  } else {
+    cat("No significant components found for", weather_var, "\n")
+  }
+  
+  # Plot FDA results
+  plot(itp_result, main = weather_var, xrange = c(-10, 90), xlab = 'Day', xaxt = 'n')
+  axis(1, at = seq(-10, 90, by = 2), labels = seq(-10, 90, by = 2))
+  pvals <- itp_result$pval
+
+  # Define significance threshold
+  alpha <- 0.05
+
+  # Identify significant time points
+  significant_points <- which(pvals < alpha)
+
+  # Group into contiguous regions
+  if (length(significant_points) > 0) {
+    stable_regions <- split(significant_points, cumsum(c(1, diff(significant_points) != 1)))
+    region_ranges <- lapply(stable_regions, function(x) range(x))
+
+    cat("Stable regions (p-value <", alpha, "):\n")
+    for (r in region_ranges) {
+      cat("Day", r[1] - 10, "to", r[2] - 10, "\n")
+    }
+  } else {
+    cat("No stable regions with p-value <", alpha, " found.\n")
+  }
+  
+  return(itp_result)
+}
+```
+
+## fdatest variables
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: true
+#| code-fold: true 
+str(trials_weather)
+library(fdatest)
+itp_tmean <- run_ITP_test(data = trials_weather, weather_var = "T2M", B = 100)
+
+itp_GWETROOT <- run_ITP_test(data = trials_weather, weather_var = "GWETROOT", B = 100)
+
+
+itp_GWETTOP <- run_ITP_test(data = trials_weather, weather_var = "GWETTOP", B = 100)
+
+itp_TMAX <- run_ITP_test(data = trials_weather, weather_var = "T2M_MAX", B = 100)
+
+tp_TMIN <- run_ITP_test(data = trials_weather, weather_var = "T2M_MIN", B = 100)
+
+tp_rh2m <- run_ITP_test(data = trials_weather, weather_var = "RH2M", B = 100)
+
+tp_PREC <- run_ITP_test(data = trials_weather, weather_var = "PRECTOTCORR", B = 100)
+
+tp_PREC <- run_ITP_test(data = trials_weather, weather_var = "T2MDEW", B = 100)
+
+tp_PREC <- run_ITP_test(data = trials_weather, weather_var = "CLRSKY_SFC_SW_DWN", B = 100)
+
+tp_PREC <- run_ITP_test(data = trials_weather, weather_var = "WS2M", B = 100)
+tp_PREC <- run_ITP_test(data = trials_weather, weather_var = "PS", B = 100)
+tp_PREC <- run_ITP_test(data = trials_weather, weather_var = "ALLSKY_SFC_SW_DWN", B = 100)
+
+```

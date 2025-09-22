@@ -1,0 +1,15 @@
+{
+  "hash": "2c50ce307081b041a8e190232b3cf1b6",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"\"\nformat: html\neditor: visual\n---\n\n\n\n\n## Loading some packages\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code  code-fold=\"true\"}\nlibrary(writexl)\nlibrary(tidyverse)\nlibrary(gsheet)\nlibrary(lubridate)\n```\n:::\n\n\n\n\n## Field dataset\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code  code-fold=\"true\"}\ndat_all2 <- gsheet2tbl(\"https://docs.google.com/spreadsheets/d/14Ijvs2e8wUmG23Izkg-MUrG4A2vjogX-/edit?usp=sharing&ouid=116573839171815179218&rtpof=true&sd=true\")\n```\n:::\n\n\n\n\n## Interval before and after sowing date\n\nBefore creating the intervals, you need to verify whether the dates are in the correct format and ensure that the data is consistent across all studies\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code  code-fold=\"true\"}\ndat_all2=dat_all2 %>% filter(study!=\"106\")\n\ndat_all2 <- dat_all2 %>%\n  mutate(sowing = if_else(study == 150, as.Date(\"2024-11-01\"), sowing))\ntrials_setup <- dat_all2 %>%\n  # filter(study != c(29, 30)) %>%\n  mutate(\n    sowing = as.Date(sowing, format = \"%d-%m-%Y\")\n  ) %>%\n  mutate(\n    minus5 = sowing - 5,\n    plus90 = sowing + 90\n  )\n```\n:::\n\n\n\n\n## Classification in epidemic and non-epidemic\n\nThe threshold you choose to classify epidemics and non-epidemics may vary. For example, you might use the median value, as it splits the dataset into epidemic and non-epidemic groups more evenly. Alternatively, you could select a threshold that makes sense in the field, taking into account crop damage and yield loss.\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code  code-fold=\"true\"}\ntrials_setup2 = trials_setup |> filter(!is.na(inc)) %>%\n  mutate(epidemic = case_when(\n    inc <= 28 ~ 0,\n   inc > 28  ~ 1))\n\ntrials_setup2 |> group_by(study) |> \n  count()\n```\n\n::: {.cell-output .cell-output-stdout}\n\n```\n# A tibble: 194 × 2\n# Groups:   study [194]\n   study     n\n   <dbl> <int>\n 1     1     1\n 2     2     1\n 3     3     1\n 4     4     1\n 5     5     1\n 6     6     1\n 7     7     1\n 8     8     1\n 9     9     1\n10    10     1\n# ℹ 184 more rows\n```\n\n\n:::\n\n```{.r .cell-code  code-fold=\"true\"}\nwrite_xlsx(trials_setup2, \"trials_setup2.xlsx\")\n```\n:::\n",
+    "supporting": [],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

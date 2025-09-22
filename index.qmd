@@ -1,0 +1,11 @@
+---
+title: "Report"
+---
+
+The data from different sources were consolidated into a single table. Climatic variables were obtained from multiple databases, including NASA POWER and Xavier (presented in this report), as well as ERA5 (code not shown). Subsequently, field data and weather data were merged into a single data frame.
+
+For the analysis, a threshold was defined to classify cases as **epidemic** or **non-epidemic**. Different methods for selecting climatic variables were then applied, followed by the fitting of logistic regression models to evaluate white mold epidemics in soybean.
+
+Although the models showed satisfactory performance metrics, the main issue lies in the biological interpretation of the selected variables. Based on field observations from researchers, extension agents, and producers, it is well established that **cool temperatures combined with prolonged periods of rainfall** favor white mold epidemics. However, the models suggested the opposite, indicating that **high temperatures and dry conditions** were associated with epidemics, which is not consistent with biological knowledge or agronomic understanding of the disease.
+
+![](images/wms.jpg){fig-align="center"}

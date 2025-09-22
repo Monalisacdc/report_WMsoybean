@@ -1,0 +1,43 @@
+---
+title: ""
+---
+
+After selecting the climate variables, they were applied in a logistic model, and the model's performance metrics were evaluated.
+
+```{r}
+library(gsheet)
+final_df = gsheet2tbl("https://docs.google.com/spreadsheets/d/1BymEWPRq0ERQ3umD5IOvtK-wa4NMoq4C/edit?usp=sharing&ouid=116573839171815179218&rtpof=true&sd=true")
+```
+
+## Logistic model 
+
+Example of a model: consider changing the threshold and other climate variables.
+
+```{r}
+
+library(rms)
+library(rmda)
+library(pROC)
+library(caret)
+
+final_df$e_a
+library(rms)
+dd <- datadist(final_df)
+options(datadist = "dd")
+
+m_logistic <- lrm(epidemic ~PRECTOTCORR_14_23 + e_a_10_19,data = final_df, x=TRUE, y=TRUE)
+summary(m_logistic)
+plot(Predict(m_logistic),conf.int = TRUE)
+
+pred <- predict(m_logistic, final_df, type = "fitted")
+final_df$epidemic <- as.numeric(as.character(final_df$epidemic))
+compare <- data.frame(1, final_df$epidemic, pred)
+library(PresenceAbsence)
+optimal.thresholds(compare)
+library(caret)
+confusionMatrix(data = as.factor(as.numeric(pred > 0.76)),  mode= "everything",  reference = as.factor(final_df$epidemic))
+library(pROC)
+
+
+
+```

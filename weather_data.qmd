@@ -1,0 +1,104 @@
+---
+title: "weather_dataset"
+format: html
+editor: visual
+---
+
+You can select different sources to obtain your weather dataset, such as NASA POWER or Xavier. These need to be combined with the field data before applying different methods of analysis.
+
+## Field data
+
+```{r}
+library(gsheet) 
+trials_setup2 = gsheet2tbl('https://docs.google.com/spreadsheets/d/1TibIDThKMxkCoYW3skUWShwBz51ClhSP/edit?usp=sharing&ouid=116573839171815179218&rtpof=true&sd=true')
+```
+
+## Get nasapower
+
+```{r,eval=FALSE}
+library(readr)
+library(nasapower)
+box = data.frame()
+
+for(i in 1:length(trials_setup2$study)){
+
+lil_nasa <- get_power(
+ community = "ag",
+  temporal_api = "daily",
+  dates = c(trials_setup2$minus5[i] , trials_setup2$plus90[i]),
+  lonlat = c(trials_setup2$lon[i], trials_setup2$lat[i]),
+   pars = c("GWETROOT", "GWETTOP", "T2M", "T2M_MAX", "T2M_MIN", 
+             "T2M_RANGE", "RH2M", "PRECTOTCORR", "T2MDEW","WS2M", 
+             "PS", "ALLSKY_SFC_SW_DWN", "CLRSKY_SFC_SW_DWN")
+ ) %>%
+   mutate(study = trials_setup2$study[i])
+  box = box %>%
+bind_rows(lil_nasa) 
+}
+
+
+write.csv(box, "weather_data.csv")
+
+
+
+```
+
+## Get Xavier
+
+```{r}
+#library(tidyverse)
+#library(readxl)
+#xavier <- read_excel("data_xavier.xlsx")
+
+#dat_all2 <- read_csv("data_all.csv")
+
+#trials_weather0 <- left_join(dat_all2, xavier |>  mutate(study = as.numeric(study)))
+
+#trials_weather <- trials_weather0 |> 
+ #   mutate(
+  #  e_s = 0.6108 * exp((17.27 * ((tmax+tmin)/2)) / (((tmax+tmin)/2) + 237.3)),
+  #  e_a = e_s * (rh / 100),
+   # VPD = e_s - e_a) |> 
+  #mutate(T2M_night = (((tmax+tmin)/2) + tmin)/2) |> 
+  # mutate(epidemic = case_when(inc > 20 ~ 1, TRUE ~ 0)) |> 
+  #rename(YYYYMMDD = date) |> 
+  #mutate(tmean = (tmax + tmin)/2)
+
+```
+
+## Creating new variables
+
+First you need join the field dataset with the weather data set
+
+```{r,eval=FALSE}
+weather_data <- box
+
+trials_weather0 <- left_join(trials_setup2, weather_data)
+```
+
+### Create new weather variables
+
+```{r,eval=FALSE}
+
+trials_weather <- trials_weather0 |> 
+   mutate(
+    days = as.integer(YYYYMMDD - sowing)) |> 
+   filter(days > -31) |> 
+   mutate(
+    e_s = 0.6108 * exp((17.27 * T2M) / (T2M + 237.3)),
+    e_a = e_s * (RH2M / 100),
+    VPD = e_s - e_a) |> 
+mutate(TDD = T2M - T2MDEW) |> 
+  mutate(T2M_night = (T2M + T2M_MIN)/2) |> 
+  mutate(
+    LWD_hours = case_when(
+      RH2M >= 90 ~ 8,
+      (T2M - T2MDEW) <= 2 ~ 4,
+      TRUE ~ 0
+    )) |> 
+  mutate(int1 = T2M_night*RH2M) |> 
+  mutate(
+    CLOUDCOVER = (1 - (ALLSKY_SFC_SW_DWN / CLRSKY_SFC_SW_DWN)) * 100
+  )
+write_csv(trials_weather, "nasa_predictors.csv")
+```
